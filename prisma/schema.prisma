@@ -1,0 +1,100 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Merchant {
+  id        String            @id @default(cuid())
+  name      String
+  email     String            @unique
+  createdAt DateTime          @default(now())
+  apiKeys   ApiKey[]
+  payouts   Payout[]
+  webhooks  WebhookEndpoint[]
+  account   Account?
+}
+
+model Account {
+  id             String   @id @default(cuid())
+  merchantId     String   @unique
+  merchant       Merchant @relation(fields: [merchantId], references: [id])
+  depositAddress String   @unique
+  chain          String   @default("base")
+  label          String?
+  createdAt      DateTime @default(now())
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  merchantId String
+  merchant   Merchant  @relation(fields: [merchantId], references: [id])
+  name       String
+  hashedKey  String    @unique
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+enum PayoutStatus {
+  PENDING
+  ROUTING
+  DELIVERED
+  FAILED
+}
+
+model Payout {
+  id             String       @id @default(cuid())
+  merchantId     String
+  merchant       Merchant     @relation(fields: [merchantId], references: [id])
+  amount         Decimal      @db.Decimal(20, 6)
+  currency       String
+  network        String
+  status         PayoutStatus @default(PENDING)
+  txHash         String?
+  recipient      Json
+  statusHistory  Json[]
+  idempotencyKey String?      @unique
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  ledgerEntries  LedgerEntry[]
+}
+
+model LedgerEntry {
+  id            String   @id @default(cuid())
+  merchantId    String
+  payoutId      String?
+  payout        Payout?  @relation(fields: [payoutId], references: [id])
+  debitAccount  String
+  creditAccount String
+  amount        Decimal  @db.Decimal(20, 6)
+  currency      String
+  createdAt     DateTime @default(now())
+}
+
+model WebhookEndpoint {
+  id         String   @id @default(cuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  url        String
+  secret     String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
+
+model IdempotencyRecord {
+  id           String   @id @default(cuid())
+  key          String
+  merchantId   String
+  requestHash  String
+  responseBody Json
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@unique([key, merchantId])
+}
